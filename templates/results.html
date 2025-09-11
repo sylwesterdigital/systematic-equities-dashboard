@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h3>Backtest results ({{ n_days }} trading days)</h3>
+
+  <div class="grid" style="grid-template-columns: 1fr;">
+    <div class="svgwrap" style="padding:10px">
+      <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" width="100%" height="260">
+        <rect x="0" y="0" width="{{ chart.width }}" height="{{ chart.height }}" fill="#09102c"></rect>
+        {% if chart.points %}
+        <polyline fill="none" stroke="#7bd4ff" stroke-width="2" points="{{ chart.points }}" />
+        {% else %}
+        <text x="24" y="40" fill="#a9b0c7">No data to plot.</text>
+        {% endif %}
+      </svg>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><b>{{ (metrics.cagr*100) | round(2) }}%</b><span class="pill">CAGR</span></div>
+    <div class="metric"><b>{{ (metrics.vol*100) | round(2) }}%</b><span class="pill">Ann. Vol</span></div>
+    <div class="metric"><b>{{ metrics.sharpe | round(2) }}</b><span class="pill">Sharpe</span></div>
+    <div class="metric"><b>{{ (metrics.max_dd*100) | round(2) }}%</b><span class="pill">Max Drawdown</span></div>
+    <div class="metric"><b>{{ metrics.avg_turn | round(3) }}</b><span class="pill">Avg Turnover (∑|Δw|)</span></div>
+    <div class="metric"><b>{{ (metrics.hit_rate*100) | round(1) }}%</b><span class="pill">Hit Rate (daily)</span></div>
+  </div>
+
+  <h4 style="margin-top:16px">Parameters</h4>
+  <table>
+    <tr><th>Start</th><td>{{ params.start }}</td><th>End</th><td>{{ params.end }}</td></tr>
+    <tr><th>Momentum window</th><td>{{ params.mom_win }}</td><th>Gap</th><td>{{ params.gap }}</td></tr>
+    <tr><th>Quantile</th><td>{{ (params.quantile*100) | round(0) }}%</td><th>Max pos</th><td>{{ params.max_pos }}</td></tr>
+    <tr><th>Turnover cost (bps)</th><td>{{ params.tc_bps }}</td><td></td><td></td></tr>
+  </table>
+
+  <div style="margin-top:12px">
+    <a class="pill" href="{{ url_for('download_run', run_id=run_id) }}">Download run CSV</a>
+    <a class="pill" href="{{ url_for('index') }}" style="margin-left:8px">← Back</a>
+  </div>
+</section>
+
+{% endblock %}
