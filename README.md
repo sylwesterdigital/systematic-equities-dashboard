@@ -5,9 +5,9 @@ Upload long-format price data, configure a few parameters, run an **equal-weight
 
 > No third-party app builders. Dependencies: `flask`, `pandas`, `numpy`.
 
-Basic Layout
-<img width="1223" height="1003" alt="Screenshot 2025-09-13 at 11 39 46" src="https://github.com/user-attachments/assets/9437c6ca-02a8-4e68-8cfe-256c7facaee4" />
+##Basic Layout
 
+![SED-c_LOOP_FOREVER](https://github.com/user-attachments/assets/c4fe4606-87de-4eb0-9d2e-8f88f2fdbd8a)
 
 ---
 
