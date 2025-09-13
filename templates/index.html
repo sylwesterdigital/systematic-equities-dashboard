@@ -1,65 +1,213 @@
-{% extends "base.html" %}
-{% block content %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Systematic Equities — Minimal Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{--bg:#0f1220;--panel:#181c2f;--text:#e9edf6;--muted:#a9b0c7;--accent:#7bd4ff;--ok:#52d273;--warn:#f6c945;--bad:#ff6b6b;}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b0e1a,#12162a);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif}
+    header{padding:16px 20px;border-bottom:1px solid #22263b;background:rgba(12,16,30,.7);backdrop-filter:saturate(120%) blur(8px);position:sticky;top:0;z-index:20}
+    h1{margin:0;font-size:18px;letter-spacing:.3px}
+    main{max-width:1200px;margin:24px auto;padding:0 16px 64px}
+    .grid{display:grid;gap:16px;grid-template-columns:280px 1fr}
+    .card{background:var(--panel);border:1px solid #242947;border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    label{display:block;margin:.5rem 0 .25rem;color:var(--muted);font-size:12px}
+    input,select{width:100%;padding:.55rem .65rem;border-radius:10px;border:1px solid #2a3156;background:#0e1330;color:var(--text)}
+    button{appearance:none;border:0;border-radius:12px;padding:.65rem .9rem;background:linear-gradient(180deg,#3a86ff,#2f6ae0);color:white;font-weight:600;cursor:pointer;box-shadow:0 6px 16px rgba(47,106,224,.35)}
+    button.secondary{background:#26305a}
+    .pill{display:inline-block;padding:.1rem .5rem;border-radius:999px;border:1px solid #2c335a;color:#a9b0c7;font-size:12px}
+    .svgwrap{background:#0b0f2a;border:1px solid #1f2444;border-radius:12px;overflow:hidden}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+    .metric{background:#111535;border:1px solid #242947;border-radius:10px;padding:10px}
+    .metric b{display:block;font-size:18px;margin-bottom:4px;color:#fff}
+    footer{opacity:.7;text-align:center;margin-top:24px;color:var(--muted)}
+    .blocker{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:40}
+    .blocker.show{display:flex}
+    .dlg{background:#12173a;border:1px solid #2c335a;border-radius:14px;padding:16px;width:360px;text-align:center;color:#e9edf6}
+    .spinner{width:28px;height:28px;border:3px solid #2f3a7a;border-top-color:#7bd4ff;border-radius:50%;margin:8px auto 12px;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .toasts{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:50}
+    .toast{background:#1b2147;border:1px solid #2f3a7a;color:#e9edf6;padding:10px 12px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+    a{color:#7bd4ff;text-decoration:none} a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Systematic Equities — Minimal Dashboard</h1>
+  </header>
 
-<div class="grid cols">
-  <section class="card">
-    <h3>1) Upload price data (CSV)</h3>
-    <p class="pill">Format: <code>date,ticker,close,volume</code> (long form). Example rows:</p>
-    <pre class="pill">2024-01-02,AAPL,185.6,51147000
-    2024-01-02,MSFT,374.5,19233000</pre>
-
-    <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
-      <label>CSV file</label>
-      <input type="file" name="file" accept=".csv" required>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button type="submit">Upload / Replace</button>
-        <a class="pill" href="{{ url_for('download_sample') }}">Download sample CSV</a>
+  <!-- Blocking overlay -->
+  <div id="blocker" class="blocker" aria-hidden="true">
+    <div class="dlg">
+      <div class="spinner"></div>
+      <div id="blkMsg">Running backtest…</div>
+      <div style="margin-top:10px">
+        <button id="cancelBtn" class="secondary">Cancel</button>
       </div>
-    </form>
+    </div>
+  </div>
 
-    {% if has_data %}
-    <p style="margin-top:10px">
-      Current dataset: <b>{{ rows }} rows</b>,
-      tickers: <b>{{ ntickers }}</b>,
-      dates: <b>{{ start }} → {{ end }}</b>
-    </p>
-    {% else %}
-    <p style="margin-top:10px;color:#f6c945">No data uploaded yet.</p>
-    {% endif %}
-  </section>
+  <main>
+    <div class="grid">
 
-  <section class="card">
-    <h3>2) Configure & run backtest</h3>
-    <form action="{{ url_for('run_backtest') }}" method="post">
-      <label>Start date</label>
-      <input type="date" name="start" value="{{ default_start }}">
-      <label>End date</label>
-      <input type="date" name="end" value="{{ default_end }}">
+      <!-- Sidebar: upload + config -->
+      <aside class="card">
+        <h3>Upload CSV & Configure</h3>
+        <form id="cfgForm" action="javascript:void(0)" method="post" enctype="multipart/form-data">
+          <label>CSV file (auto-runs when selected)</label>
+          <input id="csv" type="file" name="file" accept=".csv">
 
-      <label>Momentum window (days)</label>
-      <input type="number" name="mom_win" value="60" min="20" max="252">
+          <label>Start date</label>
+          <input type="date" name="start" value="{{ default_start }}">
+          <label>End date</label>
+          <input type="date" name="end" value="{{ default_end }}">
 
-      <label>Skip recent days (gap)</label>
-      <input type="number" name="gap" value="5" min="0" max="20">
+          <label>Momentum window (days)</label>
+          <input type="number" name="mom_win" value="60" min="20" max="252">
 
-      <label>Quantile for L/S (top & bottom %)</label>
-      <select name="quantile">
-        <option value="0.1">10%</option>
-        <option value="0.2" selected>20%</option>
-        <option value="0.3">30%</option>
-      </select>
+          <label>Skip recent days (gap)</label>
+          <input type="number" name="gap" value="5" min="0" max="20">
 
-      <label>Position cap per name</label>
-      <input type="number" name="max_pos" value="0.02" step="0.01" min="0.01" max="0.1">
+          <label>Quantile (top/bottom %)</label>
+          <select name="quantile">
+            <option value="0.1">10%</option>
+            <option value="0.2" selected>20%</option>
+            <option value="0.3">30%</option>
+          </select>
 
-      <label>Turnover cost (bps)</label>
-      <input type="number" name="tc_bps" value="10" step="1" min="0" max="100">
+          <label>Max position per name</label>
+          <input type="number" name="max_pos" value="0.02" step="0.01" min="0.01" max="0.1">
 
-      <div style="margin-top:12px">
-        <button type="submit">Run Backtest</button>
-      </div>
-    </form>
-  </section>
-</div>
+          <label>Turnover cost (bps)</label>
+          <input type="number" name="tc_bps" value="10" step="1" min="0" max="100">
 
-{% endblock %}
+          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <button id="runBtn" type="button">Run Backtest</button>
+            <a class="pill" href="{{ url_for('download_sample') }}">Download sample CSV</a>
+            {% if has_data %}
+            <span class="pill">{{ rows }} rows · {{ ntickers }} tickers loaded</span>
+            {% else %}
+            <span class="pill" style="color:#f6c945">No dataset yet</span>
+            {% endif %}
+          </div>
+        </form>
+      </aside>
+
+      <!-- Main content / results -->
+      <section class="card" id="resBody">
+        <h3>Results</h3>
+        <p class="pill">No results yet.</p>
+      </section>
+
+    </div>
+
+    <footer>© 2025 WORKWORK.FUN — Minimal research ➜ portfolio ➜ results loop</footer>
+  </main>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script>
+    let controller = null;
+
+    function toast(msg, ms=3500){
+      console.log("[toast]", msg);
+      const box = document.getElementById('toasts');
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      box.appendChild(el);
+      setTimeout(()=> el.remove(), ms);
+    }
+
+    function blockUI(msg="Running…"){
+      document.getElementById('blkMsg').textContent = msg;
+      document.getElementById('blocker').classList.add('show');
+    }
+    function unblockUI(){
+      document.getElementById('blocker').classList.remove('show');
+    }
+
+    async function runAll(autoFromFile=false){
+      const form = document.getElementById('cfgForm');
+      const fd = new FormData(form);
+      const fileInput = document.getElementById('csv');
+      if (autoFromFile && fileInput.files.length === 0){
+        toast("No file selected.");
+        return;
+      }
+      if (fileInput.files.length > 0){
+        fd.set('file', fileInput.files[0]);
+      } else {
+        fd.delete('file');
+      }
+
+      if (controller) controller.abort();
+      controller = new AbortController();
+
+      blockUI(fileInput.files.length ? "Uploading + running…" : "Running backtest…");
+
+      try{
+        const res = await fetch("{{ url_for('run_all') }}", { method:"POST", body: fd, signal: controller.signal });
+        if (!res.ok){
+          const txt = await res.text();
+          toast(`Error ${res.status}: ${txt.slice(0,120)}`);
+          unblockUI();
+          return;
+        }
+        const data = await res.json();
+        if (!data.ok){
+          toast(data.message || "Run failed");
+          unblockUI();
+          return;
+        }
+
+        const m = data.metrics, p = data.params, c = data.chart;
+        const html = `
+          <h3>Results</h3>
+          <div class="svgwrap" style="padding:10px;margin-bottom:10px">
+            <svg viewBox="0 0 ${c.width} ${c.height}" width="100%" height="220">
+              <rect x="0" y="0" width="${c.width}" height="${c.height}" fill="#09102c"></rect>
+          ${c.points ? `<polyline fill="none" stroke="#7bd4ff" stroke-width="2" points="${c.points}" />` :
+          `<text x="24" y="40" fill="#a9b0c7">No data</text>`}
+            </svg>
+          </div>
+          <div class="metrics">
+            <div class="metric"><b>${(m.cagr*100).toFixed(2)}%</b><span class="pill">CAGR</span></div>
+            <div class="metric"><b>${(m.vol*100).toFixed(2)}%</b><span class="pill">Ann. Vol</span></div>
+            <div class="metric"><b>${(m.sharpe).toFixed(2)}</b><span class="pill">Sharpe</span></div>
+            <div class="metric"><b>${(m.max_dd*100).toFixed(2)}%</b><span class="pill">Max DD</span></div>
+            <div class="metric"><b>${(m.avg_turn).toFixed(3)}</b><span class="pill">Avg Turnover</span></div>
+            <div class="metric"><b>${(m.hit_rate*100).toFixed(1)}%</b><span class="pill">Hit Rate</span></div>
+          </div>
+          <h4 style="margin-top:12px">Params</h4>
+          <p class="pill">Dates: ${p.start} → ${p.end} | Win=${p.mom_win} Gap=${p.gap} Q=${(p.quantile*100).toFixed(0)}% MaxPos=${p.max_pos} TC=${p.tc_bps}bps</p>
+          <div style="margin-top:10px">
+            <a class="pill" href="${location.origin + "{{ url_for('download_run', run_id='RUN') }}".replace('RUN', data.run_id)}">Download run CSV</a>
+          </div>
+        `;
+        document.getElementById('resBody').innerHTML = html;
+        toast(data.message || "Backtest completed.");
+      } catch(err){
+        if (err.name === 'AbortError'){
+          toast("Run cancelled.");
+        } else {
+          console.error(err);
+          toast("Unexpected error (see console).");
+        }
+      } finally {
+        unblockUI();
+        controller = null;
+      }
+    }
+
+    document.getElementById('cancelBtn').onclick = () => { if (controller) controller.abort(); };
+    window.addEventListener('DOMContentLoaded', () => {
+      const file = document.getElementById('csv');
+      file.addEventListener('change', () => runAll(true));
+      document.getElementById('runBtn').addEventListener('click', (e) => { e.preventDefault(); runAll(false); });
+    });
+  </script>
+</body>
+</html>
