@@ -5,8 +5,7 @@
   <title>Systematic Equities — Minimal Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root{--bg:#0f1220;--panel:#181c2f;--text:#e9edf6;--muted:#a9b0c7;--accent:#7bd4ff;--ok:#52d273;--warn:#f6c945;--bad:#ff6b6b;}
-    *{box-sizing:border-box}
+    :root{--bg:#0f1220;--panel:#181c2f;--text:#e9edf6;--muted:#a9b0c7;--accent:#7bd4ff;}
     body{margin:0;background:linear-gradient(180deg,#0b0e1a,#12162a);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif}
     header{padding:16px 20px;border-bottom:1px solid #22263b;background:rgba(12,16,30,.7);backdrop-filter:saturate(120%) blur(8px);position:sticky;top:0;z-index:20}
     h1{margin:0;font-size:18px;letter-spacing:.3px}
@@ -16,9 +15,7 @@
     label{display:block;margin:.5rem 0 .25rem;color:var(--muted);font-size:12px}
     input,select{width:100%;padding:.55rem .65rem;border-radius:10px;border:1px solid #2a3156;background:#0e1330;color:var(--text)}
     button{appearance:none;border:0;border-radius:12px;padding:.65rem .9rem;background:linear-gradient(180deg,#3a86ff,#2f6ae0);color:white;font-weight:600;cursor:pointer;box-shadow:0 6px 16px rgba(47,106,224,.35)}
-    button.secondary{background:#26305a}
     .pill{display:inline-block;padding:.1rem .5rem;border-radius:999px;border:1px solid #2c335a;color:#a9b0c7;font-size:12px}
-    .svgwrap{background:#0b0f2a;border:1px solid #1f2444;border-radius:12px;overflow:hidden}
     .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
     .metric{background:#111535;border:1px solid #242947;border-radius:10px;padding:10px}
     .metric b{display:block;font-size:18px;margin-bottom:4px;color:#fff}
@@ -30,8 +27,8 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .toasts{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:50}
     .toast{background:#1b2147;border:1px solid #2f3a7a;color:#e9edf6;padding:10px 12px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
-    a{color:#7bd4ff;text-decoration:none} a:hover{text-decoration:underline}
   </style>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
   <header>
@@ -51,8 +48,7 @@
 
   <main>
     <div class="grid">
-
-      <!-- Sidebar: upload + config -->
+      <!-- Sidebar -->
       <aside class="card">
         <h3>Upload CSV & Configure</h3>
         <form id="cfgForm" action="javascript:void(0)" method="post" enctype="multipart/form-data">
@@ -95,12 +91,11 @@
         </form>
       </aside>
 
-      <!-- Main content / results -->
+      <!-- Results -->
       <section class="card" id="resBody">
         <h3>Results</h3>
         <p class="pill">No results yet.</p>
       </section>
-
     </div>
 
     <footer>© 2025 WORKWORK.FUN — Minimal research ➜ portfolio ➜ results loop</footer>
@@ -112,7 +107,6 @@
     let controller = null;
 
     function toast(msg, ms=3500){
-      console.log("[toast]", msg);
       const box = document.getElementById('toasts');
       const el = document.createElement('div');
       el.className = 'toast';
@@ -121,58 +115,45 @@
       setTimeout(()=> el.remove(), ms);
     }
 
-    function blockUI(msg="Running…"){
-      document.getElementById('blkMsg').textContent = msg;
-      document.getElementById('blocker').classList.add('show');
-    }
-    function unblockUI(){
-      document.getElementById('blocker').classList.remove('show');
-    }
+    function blockUI(msg="Running…"){ document.getElementById('blkMsg').textContent = msg; document.getElementById('blocker').classList.add('show'); }
+    function unblockUI(){ document.getElementById('blocker').classList.remove('show'); }
 
     async function runAll(autoFromFile=false){
       const form = document.getElementById('cfgForm');
       const fd = new FormData(form);
       const fileInput = document.getElementById('csv');
-      if (autoFromFile && fileInput.files.length === 0){
-        toast("No file selected.");
-        return;
-      }
-      if (fileInput.files.length > 0){
-        fd.set('file', fileInput.files[0]);
-      } else {
-        fd.delete('file');
-      }
+      if (autoFromFile && fileInput.files.length === 0){ toast("No file selected."); return; }
+      if (fileInput.files.length > 0){ fd.set('file', fileInput.files[0]); } else { fd.delete('file'); }
 
       if (controller) controller.abort();
       controller = new AbortController();
-
       blockUI(fileInput.files.length ? "Uploading + running…" : "Running backtest…");
 
       try{
         const res = await fetch("{{ url_for('run_all') }}", { method:"POST", body: fd, signal: controller.signal });
-        if (!res.ok){
-          const txt = await res.text();
-          toast(`Error ${res.status}: ${txt.slice(0,120)}`);
-          unblockUI();
-          return;
-        }
+        if (!res.ok){ const txt = await res.text(); toast(`Error ${res.status}: ${txt.slice(0,120)}`); unblockUI(); return; }
         const data = await res.json();
-        if (!data.ok){
-          toast(data.message || "Run failed");
-          unblockUI();
-          return;
-        }
+        if (!data.ok){ toast(data.message || "Run failed"); unblockUI(); return; }
 
         const m = data.metrics, p = data.params, c = data.chart;
+
+        // Interactive chart with Plotly
+        const chartDiv = document.createElement('div');
+        chartDiv.id = "equityChart";
+        Plotly.newPlot(chartDiv, [{
+          x: c.dates,
+          y: c.equity,
+          mode: 'lines',
+          line: {color:'#7bd4ff', width:2},
+          name: 'Equity Curve'
+        }], {
+          margin:{t:30}, paper_bgcolor:'#0b0f2a', plot_bgcolor:'#0b0f2a',
+          font:{color:'#e9edf6'}, xaxis:{showgrid:false}, yaxis:{showgrid:true, zeroline:false}
+        }, {responsive:true});
+
         const html = `
           <h3>Results</h3>
-          <div class="svgwrap" style="padding:10px;margin-bottom:10px">
-            <svg viewBox="0 0 ${c.width} ${c.height}" width="100%" height="220">
-              <rect x="0" y="0" width="${c.width}" height="${c.height}" fill="#09102c"></rect>
-          ${c.points ? `<polyline fill="none" stroke="#7bd4ff" stroke-width="2" points="${c.points}" />` :
-          `<text x="24" y="40" fill="#a9b0c7">No data</text>`}
-            </svg>
-          </div>
+          ${chartDiv.outerHTML}
           <div class="metrics">
             <div class="metric"><b>${(m.cagr*100).toFixed(2)}%</b><span class="pill">CAGR</span></div>
             <div class="metric"><b>${(m.vol*100).toFixed(2)}%</b><span class="pill">Ann. Vol</span></div>
@@ -188,24 +169,21 @@
           </div>
         `;
         document.getElementById('resBody').innerHTML = html;
+        Plotly.newPlot('equityChart', [{
+          x: c.dates, y: c.equity, mode:'lines', line:{color:'#7bd4ff', width:2}
+        }], {margin:{t:30}, paper_bgcolor:'#0b0f2a', plot_bgcolor:'#0b0f2a', font:{color:'#e9edf6'}, xaxis:{showgrid:false}, yaxis:{showgrid:true, zeroline:false}}, {responsive:true});
         toast(data.message || "Backtest completed.");
       } catch(err){
-        if (err.name === 'AbortError'){
-          toast("Run cancelled.");
-        } else {
-          console.error(err);
-          toast("Unexpected error (see console).");
-        }
+        if (err.name === 'AbortError'){ toast("Run cancelled."); }
+        else { console.error(err); toast("Unexpected error (see console)."); }
       } finally {
-        unblockUI();
-        controller = null;
+        unblockUI(); controller = null;
       }
     }
 
     document.getElementById('cancelBtn').onclick = () => { if (controller) controller.abort(); };
     window.addEventListener('DOMContentLoaded', () => {
-      const file = document.getElementById('csv');
-      file.addEventListener('change', () => runAll(true));
+      document.getElementById('csv').addEventListener('change', () => runAll(true));
       document.getElementById('runBtn').addEventListener('click', (e) => { e.preventDefault(); runAll(false); });
     });
   </script>
