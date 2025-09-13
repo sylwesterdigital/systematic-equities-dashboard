@@ -30,6 +30,9 @@
   </style>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
+
+
+
 <body>
   <header>
     <h1>Systematic Equities — Minimal Dashboard</h1>
@@ -115,7 +118,10 @@
       setTimeout(()=> el.remove(), ms);
     }
 
-    function blockUI(msg="Running…"){ document.getElementById('blkMsg').textContent = msg; document.getElementById('blocker').classList.add('show'); }
+    function blockUI(msg="Running…"){ 
+      document.getElementById('blkMsg').textContent = msg; 
+      document.getElementById('blocker').classList.add('show'); 
+    }
     function unblockUI(){ document.getElementById('blocker').classList.remove('show'); }
 
     async function runAll(autoFromFile=false){
@@ -137,23 +143,9 @@
 
         const m = data.metrics, p = data.params, c = data.chart;
 
-        // Interactive chart with Plotly
-        const chartDiv = document.createElement('div');
-        chartDiv.id = "equityChart";
-        Plotly.newPlot(chartDiv, [{
-          x: c.dates,
-          y: c.equity,
-          mode: 'lines',
-          line: {color:'#7bd4ff', width:2},
-          name: 'Equity Curve'
-        }], {
-          margin:{t:30}, paper_bgcolor:'#0b0f2a', plot_bgcolor:'#0b0f2a',
-          font:{color:'#e9edf6'}, xaxis:{showgrid:false}, yaxis:{showgrid:true, zeroline:false}
-        }, {responsive:true});
-
         const html = `
           <h3>Results</h3>
-          ${chartDiv.outerHTML}
+          <div id="equityChart" style="height:400px"></div>
           <div class="metrics">
             <div class="metric"><b>${(m.cagr*100).toFixed(2)}%</b><span class="pill">CAGR</span></div>
             <div class="metric"><b>${(m.vol*100).toFixed(2)}%</b><span class="pill">Ann. Vol</span></div>
@@ -169,9 +161,62 @@
           </div>
         `;
         document.getElementById('resBody').innerHTML = html;
+
+        // Interactive Plotly chart (with fullscreen + range selector + panning)
+        // Interactive Plotly chart (with fullscreen, range selector, panning/zoom)
+        
         Plotly.newPlot('equityChart', [{
-          x: c.dates, y: c.equity, mode:'lines', line:{color:'#7bd4ff', width:2}
-        }], {margin:{t:30}, paper_bgcolor:'#0b0f2a', plot_bgcolor:'#0b0f2a', font:{color:'#e9edf6'}, xaxis:{showgrid:false}, yaxis:{showgrid:true, zeroline:false}}, {responsive:true});
+          x: c.dates,
+          y: c.equity,
+          mode: 'lines',
+          line: { color:'#7bd4ff', width:2 },
+          name: 'Equity Curve'
+        }], {
+          title: "Equity Curve",
+          margin: {t:40},
+          paper_bgcolor: '#0b0f2a',
+          plot_bgcolor: '#0b0f2a',
+          font: {color:'#e9edf6'},
+          xaxis: {
+            showgrid: false,
+            rangeselector: {
+              buttons: [
+                {count:1, step:'month', stepmode:'backward', label:'1m'},
+                {count:6, step:'month', stepmode:'backward', label:'6m'},
+                {count:1, step:'year', stepmode:'backward', label:'1y'},
+                {step:'all', label:'All'}
+              ]
+            },
+            rangeslider: {visible:true}
+          },
+          yaxis: {showgrid:true, zeroline:false}
+        }, {
+          responsive: true,
+          displayModeBar: true,
+          displaylogo: false,
+          scrollZoom: true,
+          modeBarButtonsToAdd: [
+            {
+              name: 'Fullscreen',
+      icon: Plotly.Icons['arrows-v'], // pick any icon
+      click: function(gd) {
+        const el = document.getElementById('equityChart');
+        if (!document.fullscreenElement) {
+          el.requestFullscreen();
+        } else {
+          document.exitFullscreen();
+        }
+      }
+    }
+  ]
+});
+
+
+
+
+
+
+
         toast(data.message || "Backtest completed.");
       } catch(err){
         if (err.name === 'AbortError'){ toast("Run cancelled."); }
@@ -188,4 +233,8 @@
     });
   </script>
 </body>
+
+
+
+
 </html>
