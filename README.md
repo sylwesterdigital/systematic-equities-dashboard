@@ -1,42 +1,62 @@
-# Systematic Equities — Minimal Flask Dashboard
+# Systematic Equities — Minimal Flask + Plotly Dashboard
 
-**Monolithic Flask + Jinja** app for a simple research → portfolio → results loop in **systematic equities**.  
-Upload long-format price data, configure a few parameters, run an **equal-weight long/short momentum** backtest with a basic turnover cost, and view an SVG equity curve plus key metrics.
+Small, hackable dashboard for a **research → portfolio → results** loop in systematic equities.
 
-> No third-party app builders. Dependencies: `flask`, `pandas`, `numpy`.
+* Upload a long-format prices CSV, or tick **Use sample data**.
+* Run a simple **long/short momentum** backtest with turnover costs.
+* See an interactive **Plotly** equity curve + key metrics.
+* Every run is **snapshotted locally** (IndexedDB) so you can restore the **exact** chart (same window/zoom and metrics) from the **Previous Runs** drawer.
 
-##Basic Layout
+> No heavy frameworks. Dependencies: `flask`, `pandas`, `numpy` (frontend uses pinned Plotly CDN).
 
-![SED-c_LOOP_FOREVER](https://github.com/user-attachments/assets/c4fe4606-87de-4eb0-9d2e-8f88f2fdbd8a)
+---
+
+## Demo layout
+
+![loop](https://github.com/user-attachments/assets/c4fe4606-87de-4eb0-9d2e-8f88f2fdbd8a)
 
 ---
 
 ## Features
-- CSV upload (**long format**): `date,ticker,close,volume`
-- L/S momentum signal: (close[t-gap] / close[t-gap-win] − 1)
-- Dollar-neutral, equal-weight, per-name cap
-- Turnover cost in bps
-- Equity curve (SVG, no JS libs) and core metrics (CAGR, Sharpe, max DD, hit rate, avg turnover)
-- Downloadable run CSV (date, daily_pnl, equity)
+
+* **CSV upload (long format)**: `date,ticker,close,volume`
+* **Momentum signal**: $(P_{t-\text{gap}} / P_{t-\text{gap}-\text{win}}) - 1$
+* **Dollar-neutral baskets**: equal-weight long/short by quantile, per-name cap
+* **Transaction cost** in bps on turnover $\sum |\Delta w|$
+* **Interactive equity curve** (Plotly 2.29.1), range selector, slider, zoom/pan, **custom fullscreen**
+* **Run metrics**: CAGR, Annualized Vol, Sharpe, Max DD, Hit Rate, Avg Turnover
+* **History drawer (IndexedDB)**: click to restore **identical** chart & params
+* **Exports**: per-run CSV (`date,daily_pnl,equity`)
+* **UX niceties**: blocking overlay + cancel, graceful errors
 
 ---
 
 ## Quickstart
 
 ```bash
+# 1) Clone
+git clone git@github.com:sylwesterdigital/systematic-equities-dashboard.git
+cd systematic-equities-dashboard
+
+# 2) Python 3.10+ virtual env
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Windows: .venv\Scripts\activate
+source .venv/bin/activate
+
+# 3) Install deps
+python -m pip install --upgrade pip
 pip install flask pandas numpy
 
+# 4) Run
 python app.py
 # open http://127.0.0.1:5000
-````
+```
 
-Upload a CSV or click **“Download sample CSV”** to inspect the required schema.
+**Tip:** In the UI you can click **Download sample CSV** or tick **Use sample data** to ignore any uploaded/cached file.
 
 ---
 
-## Data format (required)
+## Data format
 
 ```csv
 date,ticker,close,volume
@@ -45,27 +65,49 @@ date,ticker,close,volume
 ...
 ```
 
-* Dates should be trading days; app sorts and groups by `ticker`.
-* Multiple tickers and dates supported; the app computes returns per ticker.
+* `date` must be parseable (ISO `YYYY-MM-DD` recommended).
+* Multiple tickers supported. Returns are computed **per ticker**.
 
 ---
 
 ## Parameters (UI)
 
-* **Start / End**: date range filter
-* **Momentum window (days)**: lookback for momentum
-* **Gap (days)**: skip recent days (avoid short-term reversal)
-* **Quantile (%)**: top/bottom slice for long/short baskets
-* **Max position**: per-name cap (absolute)
-* **Turnover cost (bps)**: cost per unit of turnover ∑|Δw|
+* **Start / End**: date filter applied **before** signal/weights
+* **Momentum window (days)**: lookback length
+* **Gap (days)**: skip the most recent `gap` days
+* **Quantile (%)**: top/bottom slice for L/S baskets
+* **Max position**: per-name absolute cap
+* **Turnover cost (bps)**: cost per unit turnover
 
 ---
 
 ## Outputs
 
-* **Equity curve** (SVG)
-* **Metrics**: CAGR, Ann. Vol, Sharpe, Max Drawdown, Hit Rate, Avg Turnover
-* **Run CSV** (`/runs/equity_<id>.csv`): `date,daily_pnl,equity`
+* **Equity curve** (Plotly, with range buttons + slider, custom fullscreen)
+* **Metrics**: CAGR, Ann. Vol, Sharpe, Max DD, Hit Rate, Avg Turnover
+* **Download**: `/runs/equity_<run_id>.csv` with `date,daily_pnl,equity`
+
+**History drawer:** Every run stores `{ x, y, window:[start,end], params, metrics, run_id, data_source, when }`.
+Click an item to render that snapshot **1:1** (no server call, no re-autorange).
+
+---
+
+## How it works
+
+* **Backend (`app.py`)**
+
+  * Loads uploaded CSV into `data/prices.csv`, or generates a sample.
+  * Computes momentum signal → quantile baskets → capped, balanced weights.
+  * Applies turnover cost in **bps** to daily PnL; builds cumulative equity.
+  * Returns metrics, chart arrays, and the **effective window** actually used.
+  * Writes each run’s equity to `runs/equity_<id>.csv` for download.
+
+* **Frontend (`templates/index.html`)**
+
+  * Single template with inline CSS + JS.
+  * **Pinned Plotly**: `https://cdn.plot.ly/plotly-2.29.1.min.js` (avoid “latest” warning).
+  * Styled range selector (readable on dark bg) and explicit fullscreen icon.
+  * **IndexedDB** stores the exact render payload so history restores perfectly.
 
 ---
 
@@ -74,23 +116,47 @@ date,ticker,close,volume
 ```
 app.py
 templates/
-  base.html
-  index.html
-  results.html
-data/          # uploaded dataset stored as prices.csv
-runs/          # per-run equity exports
+  index.html       # UI + Plotly + history drawer + overlay
+data/              # uploaded dataset stored as prices.csv
+runs/              # per-run equity exports
 ```
 
 ---
 
-## Roadmap (optional)
+## FAQ / Troubleshooting
 
-* Sector/β neutrality constraints
-* Basic execution simulator (TWAP/VWAP; arrival slippage)
-* TCA summary (arrival vs realized)
-* Config export/import (YAML)
-* Light tests (pytest) for signal/weights
+**Why does a restored history run keep the same time window?**
+The backend returns the **effective window** (post-filter) and the frontend locks Plotly’s `xaxis.range` to `[start, end]` from that snapshot.
+
+**Plotly warns “plotly-latest.js is not latest”.**
+We intentionally pin to **2.29.1**:
+
+```html
+<script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+```
+
+No “latest” CDN foot-guns.
+
+**IndexedDB: “The database connection is closing.”**
+The app re-opens as needed and avoids closing during active transactions. If you still see this (tab suspended / dev tools throttling), close the drawer, wait a second, reopen it, or reload the page. History data is local and will reload.
+
+**How do I force the sample instead of a cached upload?**
+Tick **Use sample data** in the sidebar; the server ignores any uploaded/cached file for that run.
 
 ---
 
-## License: 
+## Roadmap (nice next steps)
+
+* Walk-forward / expanding windows; parameter grid search
+* Multi-factor blending + basic risk targeting
+* Sector/β neutrality; borrow costs
+* Background jobs (RQ/Celery) + progress stream (SSE/WebSocket)
+* Server-side persistence (SQLite/Postgres) alongside IndexedDB
+* Light tests for signal/weights with `pytest`
+
+---
+
+## License
+
+MIT (or your preferred OSS license).
+
