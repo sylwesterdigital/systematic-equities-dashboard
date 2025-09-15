@@ -1,11 +1,4 @@
 # app.py
-# Monolithic Flask + Jinja + Inline HTML prototype
-# - Sidebar: upload + params
-# - Main area: results (always visible)
-# - Auto-run on CSV select
-# - Blocking overlay + Cancel
-# - Verbose logging
-
 import os, io, uuid, math, logging, time
 import datetime as dt
 from typing import Optional, Dict
@@ -23,11 +16,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(RUNS_DIR, exist_ok=True)
 DATA_PATH = os.path.join(DATA_DIR, "prices.csv")
 
-# ---------------- Logging ---------------- #
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(name)s :: %(message)s",
-)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(name)s :: %(message)s")
 log = logging.getLogger("sys-eq")
 
 @app.before_request
@@ -40,7 +29,7 @@ def after(resp):
     log.info(f"[{g.req_id}] status {resp.status_code}")
     return resp
 
-# ---------------- Data utils ---------------- #
+# ---------- Data ---------- #
 def load_dataset() -> Optional[pd.DataFrame]:
     if not os.path.exists(DATA_PATH):
         return None
@@ -90,7 +79,7 @@ def make_weights(df: pd.DataFrame, signal: pd.Series, quantile: float, max_pos: 
         return w
     return work.groupby("date", group_keys=False).apply(per_date)
 
-# ---------------- Backtest ---------------- #
+# ---------- Backtest ---------- #
 def backtest(df: pd.DataFrame,
              start: Optional[str],
              end: Optional[str],
@@ -99,16 +88,6 @@ def backtest(df: pd.DataFrame,
              quantile: float = 0.2,
              max_pos: float = 0.02,
              tc_bps: float = 10.0) -> Dict:
-    """
-    Run momentum backtest on given dataset.
-
-    Returns dict with:
-      - run_id: unique ID
-      - params: parameters used
-      - metrics: performance metrics (CAGR, Sharpe, etc.)
-      - chart: structured equity curve data (dates, equity values)
-      - n_days: length of backtest
-    """
     t0 = time.time()
     dff = df.copy()
     if start:
@@ -117,21 +96,20 @@ def backtest(df: pd.DataFrame,
         dff = dff[dff["date"] <= pd.to_datetime(end)]
     dff = dff.sort_values(["date", "ticker"]).reset_index(drop=True)
 
-    # Compute returns, signals, weights
+    # returns/signals/weights
     dff["ret"] = dff.groupby("ticker")["close"].pct_change()
     sig = compute_momentum_signal(dff, mom_win, gap)
     dff["w"] = make_weights(dff, sig, quantile, max_pos).values
     dff["w_lag"] = dff.groupby("ticker")["w"].shift(1).fillna(0.0)
     dff["dw"] = (dff["w"].fillna(0.0) - dff["w_lag"]).abs()
 
-    # Portfolio daily PnL
+    # portfolio pnl/equity
     turn_by_date = dff.groupby("date")["dw"].sum().clip(lower=0.0)
     daily_ret = dff.groupby("date").apply(lambda g: float((g["w_lag"] * g["ret"].fillna(0.0)).sum()))
     daily_cost = (tc_bps / 10000.0) * turn_by_date
     daily_pnl = daily_ret - daily_cost
     equity = (1.0 + daily_pnl.fillna(0.0)).cumprod()
 
-    # Metrics
     ann_factor = 252.0
     cagr = (equity.iloc[-1] ** (ann_factor / len(equity)) - 1.0) if len(equity) else 0.0
     vol = daily_pnl.std(ddof=0) * math.sqrt(ann_factor) if len(equity) > 1 else 0.0
@@ -140,44 +118,41 @@ def backtest(df: pd.DataFrame,
     avg_turn = turn_by_date.mean() if len(turn_by_date) else 0.0
     hit_rate = (daily_pnl > 0).mean() if len(daily_pnl) else 0.0
 
-    # Save equity curve to CSV
     run_id = str(uuid.uuid4())[:8]
-    out = pd.DataFrame({
-        "date": equity.index.astype(str),
-        "daily_pnl": daily_pnl.values,
-        "equity": equity.values
-    })
+    out = pd.DataFrame({"date": equity.index.astype(str), "daily_pnl": daily_pnl.values, "equity": equity.values})
     out_path = os.path.join(RUNS_DIR, f"equity_{run_id}.csv")
     out.to_csv(out_path, index=False)
 
-    # Assemble output
+    # EFFECTIVE window (exactly what equity covers)
+    if len(equity):
+        w_start = str(pd.to_datetime(equity.index.min()).date())
+        w_end   = str(pd.to_datetime(equity.index.max()).date())
+    else:
+        w_start = w_end = ""
+
     params = dict(
-        start=str(dff["date"].min().date()) if len(dff) else "",
-        end=str(dff["date"].max().date()) if len(dff) else "",
+        # keep the effective window here so the UI doesn't need to guess
+        start=w_start,
+        end=w_end,
         mom_win=mom_win, gap=gap, quantile=quantile,
         max_pos=max_pos, tc_bps=tc_bps
     )
-    metrics = dict(
-        cagr=cagr, vol=vol, sharpe=sharpe,
-        max_dd=dd, avg_turn=avg_turn, hit_rate=hit_rate
-    )
-    log.info(f"[{g.req_id}] backtest ok n_days={len(equity)} "
-             f"cagr={cagr:.3%} sharpe={sharpe:.2f} in {time.time()-t0:.2f}s")
+    metrics = dict(cagr=cagr, vol=vol, sharpe=sharpe, max_dd=dd, avg_turn=avg_turn, hit_rate=hit_rate)
+    log.info(f"[{g.req_id}] backtest ok n_days={len(equity)} cagr={cagr:.3%} sharpe={sharpe:.2f} in {time.time()-t0:.2f}s")
 
     return {
         "run_id": run_id,
         "params": params,
         "metrics": metrics,
-        # <-- frontend will now use this with Plotly -->
         "chart": {
             "dates": equity.index.astype(str).tolist(),
             "equity": equity.values.tolist()
         },
+        "window": {"start": w_start, "end": w_end},  # <— explicit window for history restore
         "n_days": int(len(equity))
     }
 
-
-# ---------------- Routes ---------------- #
+# ---------- Routes ---------- #
 @app.route("/", methods=["GET"])
 def index():
     df = load_dataset()
@@ -202,26 +177,33 @@ def run_all():
         max_pos = float(request.form.get("max_pos", 0.02))
         tc_bps = float(request.form.get("tc_bps", 10.0))
 
+        use_sample_flag = request.form.get("use_sample")
+        use_sample = str(use_sample_flag).lower() in ("1","true","on","yes")
         f = request.files.get("file")
-        if f and f.filename:
+
+        if use_sample:
+            df_loaded = sample_prices()
+            data_source = "sample"
+        elif f and f.filename:
             buf = io.StringIO(f.stream.read().decode("utf-8"))
             df = pd.read_csv(buf)
             needed = {"date","ticker","close","volume"}
             if not needed.issubset(df.columns):
                 return jsonify({"ok": False, "message": "CSV must include: date,ticker,close,volume"}), 400
             df.to_csv(DATA_PATH, index=False)
-
-        # Fixed: explicit check instead of "or" shortcut
-        df_loaded = load_dataset()
-        if df_loaded is None or df_loaded.empty:
-            df_loaded = sample_prices()
+            df_loaded = df; data_source = "uploaded"
+        else:
+            df_loaded = load_dataset()
+            if df_loaded is None or df_loaded.empty:
+                df_loaded = sample_prices(); data_source = "sample"
+            else:
+                data_source = "cached_file"
 
         res = backtest(df_loaded, start, end, mom_win, gap, quantile, max_pos, tc_bps)
-        return jsonify({"ok": True, "message": "Backtest completed.", **res})
+        return jsonify({"ok": True, "message": "Backtest completed.", "data_source": data_source, **res})
     except Exception as e:
         log.exception(f"[{g.req_id}] run-all failed")
         return jsonify({"ok": False, "message": str(e)}), 500
-
 
 @app.route("/sample.csv")
 def download_sample():

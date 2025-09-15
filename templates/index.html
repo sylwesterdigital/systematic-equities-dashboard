@@ -5,236 +5,376 @@
   <title>Systematic Equities — Minimal Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root{--bg:#0f1220;--panel:#181c2f;--text:#e9edf6;--muted:#a9b0c7;--accent:#7bd4ff;}
-    body{margin:0;background:linear-gradient(180deg,#0b0e1a,#12162a);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif}
-    header{padding:16px 20px;border-bottom:1px solid #22263b;background:rgba(12,16,30,.7);backdrop-filter:saturate(120%) blur(8px);position:sticky;top:0;z-index:20}
+    :root{
+      --bg:#0f1220; --panel:#181c2f; --text:#e9edf6; --muted:#a9b0c7; --accent:#7bd4ff;
+      --border:#242947; --btn:#3a86ff; --btn2:#2f6ae0; --chip:#2a3156;
+      --chart-h: clamp(420px, 60vh, 760px);
+    }
+    body{
+      margin:0; background:linear-gradient(180deg,#0b0e1a,#12162a); color:var(--text);
+      font:14px/1.45 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden;
+    }
+    header{ padding:16px 20px; border-bottom:1px solid #22263b; background:rgba(12,16,30,.7); backdrop-filter:saturate(120%) blur(8px); flex-shrink:0}
     h1{margin:0;font-size:18px;letter-spacing:.3px}
-    main{max-width:1200px;margin:24px auto;padding:0 16px 64px}
-    .grid{display:grid;gap:16px;grid-template-columns:280px 1fr}
-    .card{background:var(--panel);border:1px solid #242947;border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    main{ flex:1; display:grid; grid-template-columns:280px 1fr; overflow:hidden; }
+
+    aside.config{ background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto }
     label{display:block;margin:.5rem 0 .25rem;color:var(--muted);font-size:12px}
-    input,select{width:100%;padding:.55rem .65rem;border-radius:10px;border:1px solid #2a3156;background:#0e1330;color:var(--text)}
-    button{appearance:none;border:0;border-radius:12px;padding:.65rem .9rem;background:linear-gradient(180deg,#3a86ff,#2f6ae0);color:white;font-weight:600;cursor:pointer;box-shadow:0 6px 16px rgba(47,106,224,.35)}
-    .pill{display:inline-block;padding:.1rem .5rem;border-radius:999px;border:1px solid #2c335a;color:#a9b0c7;font-size:12px}
+    input,select{width:100%;padding:.55rem .65rem;border-radius:10px;border:1px solid var(--chip);background:#0e1330;color:var(--text)}
+    button{appearance:none;border:0;border-radius:12px;padding:.65rem .9rem;background:linear-gradient(180deg,var(--btn),var(--btn2));color:#fff;font-weight:600;cursor:pointer;box-shadow:0 6px 16px rgba(47,106,224,.35)}
+    .btn-ghost{background:#0e1330;border:1px solid var(--chip);box-shadow:none}
+    .chip{display:inline-block;padding:.15rem .55rem;border-radius:999px;border:1px solid var(--chip);color:#a9b0c7;font-size:12px}
+
+    section.results{ padding:16px; overflow-y:auto }
+    .card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:0 6px 18px rgba(0,0,0,.25); margin-bottom:16px }
     .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
-    .metric{background:#111535;border:1px solid #242947;border-radius:10px;padding:10px}
+    .metric{background:#111535;border:1px solid var(--border);border-radius:10px;padding:10px}
     .metric b{display:block;font-size:18px;margin-bottom:4px;color:#fff}
-    footer{opacity:.7;text-align:center;margin-top:24px;color:var(--muted)}
-    .blocker{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:40}
+    footer{opacity:.7;text-align:center;margin:20px 0;color:var(--muted)}
+
+    /* History drawer */
+    .history-drawer{
+      position:fixed; top:0; left:-280px; width:280px; height:100%; background:#14182b;
+      border-right:1px solid var(--chip); transition:left .28s ease; z-index:100; padding:16px; overflow-y:auto; box-sizing:border-box;
+    }
+    .history-drawer.show{ left:0 }
+    .toggle-history{
+      position:absolute; top:51px; left:10px; z-index:110;
+      background:linear-gradient(180deg,var(--btn),var(--btn2)); color:#fff; border:none; border-radius:8px; padding:6px 10px; cursor:pointer; font-size:13px;
+      box-shadow:0 4px 10px rgba(0,0,0,.3)
+    }
+    #historyList{ list-style:none; padding:0; margin:0 }
+    #historyList li{
+      background:#1b2147; border:1px solid #2f3a7a; margin-bottom:8px; padding:8px; border-radius:8px; cursor:pointer; display:flex; flex-direction:column; gap:4px
+    }
+    #historyList li:hover{ background:#2a3156 }
+    #historyList small{ color:#b7bed6 }
+
+    /* Blocking overlay */
+    .blocker{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:200}
     .blocker.show{display:flex}
-    .dlg{background:#12173a;border:1px solid #2c335a;border-radius:14px;padding:16px;width:360px;text-align:center;color:#e9edf6}
+    .dlg{background:#12173a;border:1px solid var(--chip);border-radius:14px;padding:16px 18px;width:360px;text-align:center;color:var(--text)}
     .spinner{width:28px;height:28px;border:3px solid #2f3a7a;border-top-color:#7bd4ff;border-radius:50%;margin:8px auto 12px;animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
-    .toasts{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:50}
-    .toast{background:#1b2147;border:1px solid #2f3a7a;color:#e9edf6;padding:10px 12px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+
+    .chart-wrap{ height: var(--chart-h); }
+    .modebar-btn--logo{display:none!important}
   </style>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
 </head>
 
-
-
 <body>
-  <header>
-    <h1>Systematic Equities — Minimal Dashboard</h1>
-  </header>
+  <header><h1>Systematic Equities — Minimal Dashboard</h1></header>
+
+  <!-- History drawer -->
+  <div id="historyDrawer" class="history-drawer">
+    <h3 style="margin-top:0">Previous Runs</h3>
+    <ul id="historyList"></ul>
+    <button id="clearHistory" class="btn-ghost" style="width:100%;margin-top:12px">Clear History</button>
+  </div>
+  <button id="toggleHistory" class="toggle-history" title="Previous runs">☰</button>
 
   <!-- Blocking overlay -->
   <div id="blocker" class="blocker" aria-hidden="true">
     <div class="dlg">
       <div class="spinner"></div>
       <div id="blkMsg">Running backtest…</div>
-      <div style="margin-top:10px">
-        <button id="cancelBtn" class="secondary">Cancel</button>
-      </div>
+      <div style="margin-top:10px"><button id="cancelBtn" class="btn-ghost">Cancel</button></div>
     </div>
   </div>
 
   <main>
-    <div class="grid">
-      <!-- Sidebar -->
-      <aside class="card">
-        <h3>Upload CSV & Configure</h3>
-        <form id="cfgForm" action="javascript:void(0)" method="post" enctype="multipart/form-data">
-          <label>CSV file (auto-runs when selected)</label>
-          <input id="csv" type="file" name="file" accept=".csv">
+    <!-- Config sidebar -->
+    <aside class="config">
+      <h3>Upload CSV & Configure</h3>
+      <form id="cfgForm" action="javascript:void(0)" method="post" enctype="multipart/form-data">
+        <label>CSV file</label>
+        <input id="csv" type="file" name="file" accept=".csv" style="display:none">
+        <button id="uploadBtn" type="button">Choose CSV</button>
+        <span id="fileName" class="chip" style="margin-left:8px">No file</span>
 
-          <label>Start date</label>
-          <input type="date" name="start" value="{{ default_start }}">
-          <label>End date</label>
-          <input type="date" name="end" value="{{ default_end }}">
+        <label style="margin-top:10px">
+          <input type="checkbox" name="use_sample" id="use_sample"> Use sample data (ignore uploaded/cached CSV)
+        </label>
 
-          <label>Momentum window (days)</label>
-          <input type="number" name="mom_win" value="60" min="20" max="252">
+        <label>Start date</label>
+        <input type="date" name="start" value="{{ default_start }}">
+        <label>End date</label>
+        <input type="date" name="end" value="{{ default_end }}">
 
-          <label>Skip recent days (gap)</label>
-          <input type="number" name="gap" value="5" min="0" max="20">
+        <label>Momentum window (days)</label>
+        <input type="number" name="mom_win" value="60" min="20" max="252">
+        <label>Skip recent days (gap)</label>
+        <input type="number" name="gap" value="5" min="0" max="20">
 
-          <label>Quantile (top/bottom %)</label>
-          <select name="quantile">
-            <option value="0.1">10%</option>
-            <option value="0.2" selected>20%</option>
-            <option value="0.3">30%</option>
-          </select>
+        <label>Quantile (top/bottom %)</label>
+        <select name="quantile">
+          <option value="0.1">10%</option>
+          <option value="0.2" selected>20%</option>
+          <option value="0.3">30%</option>
+        </select>
 
-          <label>Max position per name</label>
-          <input type="number" name="max_pos" value="0.02" step="0.01" min="0.01" max="0.1">
+        <label>Max position per name</label>
+        <input type="number" name="max_pos" value="0.02" step="0.01" min="0.01" max="0.1">
+        <label>Turnover cost (bps)</label>
+        <input type="number" name="tc_bps" value="10" step="1" min="0" max="100">
 
-          <label>Turnover cost (bps)</label>
-          <input type="number" name="tc_bps" value="10" step="1" min="0" max="100">
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <button id="runBtn" type="button">Run Backtest</button>
+          <a class="chip" href="{{ url_for('download_sample') }}">Download sample CSV</a>
+          <span id="loadedInfo" class="chip">Ready</span>
+        </div>
+      </form>
+    </aside>
 
-          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-            <button id="runBtn" type="button">Run Backtest</button>
-            <a class="pill" href="{{ url_for('download_sample') }}">Download sample CSV</a>
-            {% if has_data %}
-            <span class="pill">{{ rows }} rows · {{ ntickers }} tickers loaded</span>
-            {% else %}
-            <span class="pill" style="color:#f6c945">No dataset yet</span>
-            {% endif %}
-          </div>
-        </form>
-      </aside>
-
-      <!-- Results -->
-      <section class="card" id="resBody">
+    <!-- Results -->
+    <section class="results">
+      <div class="card" id="resBody">
         <h3>Results</h3>
-        <p class="pill">No results yet.</p>
-      </section>
-    </div>
-
-    <footer>© 2025 WORKWORK.FUN — Minimal research ➜ portfolio ➜ results loop</footer>
+        <p class="chip">No results yet.</p>
+      </div>
+      <footer>© 2025 WORKWORK.FUN — Minimal research ➜ portfolio ➜ results loop</footer>
+    </section>
   </main>
 
-  <div class="toasts" id="toasts"></div>
-
   <script>
+    /* ===================== Drawer + file UI ===================== */
+    document.getElementById('toggleHistory').onclick = () =>
+    document.getElementById('historyDrawer').classList.toggle('show');
+
+    document.getElementById('uploadBtn').onclick = () => document.getElementById('csv').click();
+    document.getElementById('csv').addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      document.getElementById('fileName').textContent = f ? f.name : 'No file';
+      if (f && !document.getElementById('use_sample').checked) runAll(true);
+    });
+
+    /* ===================== Overlay helpers ===================== */
     let controller = null;
-
-    function toast(msg, ms=3500){
-      const box = document.getElementById('toasts');
-      const el = document.createElement('div');
-      el.className = 'toast';
-      el.textContent = msg;
-      box.appendChild(el);
-      setTimeout(()=> el.remove(), ms);
-    }
-
-    function blockUI(msg="Running…"){ 
-      document.getElementById('blkMsg').textContent = msg; 
-      document.getElementById('blocker').classList.add('show'); 
-    }
+    function blockUI(msg){ document.getElementById('blkMsg').textContent = msg || 'Running…'; document.getElementById('blocker').classList.add('show'); }
     function unblockUI(){ document.getElementById('blocker').classList.remove('show'); }
 
+    /* ===================== Robust IndexedDB wrapper ===================== */
+    const DB_NAME = 'sysEqDB';
+    const DB_VER  = 3;             // bump to 3 to migrate cleanly
+    const STORE   = 'runs';
+
+    function openDB(){
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VER);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath:'id', autoIncrement:true });
+        };
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          // If another tab upgrades, gracefully close & reopen on next call
+          db.onversionchange = () => { try{ db.close(); }catch(_){} };
+          resolve(db);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function withStore(mode, fn){
+      // always get a fresh connection -> avoids "connection is closing"
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        let tx;
+        try {
+          tx = db.transaction(STORE, mode);
+        } catch (err) {
+          // if we raced a versionchange, retry once with a new db
+          openDB().then(db2 => {
+            try {
+              const tx2 = db2.transaction(STORE, mode);
+              fn(tx2.objectStore(STORE), resolve, reject, tx2);
+            } catch (err2) { reject(err2); }
+          }).catch(reject);
+          return;
+        }
+        fn(tx.objectStore(STORE), resolve, reject, tx);
+      });
+    }
+
+    function saveSnapshot(snapshot){
+      return withStore('readwrite', (store, resolve, reject, tx) => {
+        const req = store.add(snapshot);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => {}; // noop
+      });
+    }
+
+    function fetchAllSnapshots(){
+      return withStore('readonly', (store, resolve, reject) => {
+        const out = [];
+        const req = store.openCursor(null, 'prev');
+        req.onsuccess = (e) => {
+          const cur = e.target.result;
+          if (!cur) return resolve(out);
+          out.push({ id: cur.key, ...cur.value });
+          cur.continue();
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function clearSnapshots(){
+      return withStore('readwrite', (store, resolve, reject) => {
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    /* ===================== History UI ===================== */
+    async function loadHistory(){
+      try{
+        const list = document.getElementById('historyList'); list.innerHTML = '';
+        const items = await fetchAllSnapshots();
+        for (const it of items){
+          const p = it.params || {};
+          const title = `#${it.id} · ${p.start||''} → ${p.end||''} · ${it.data_source||''}`;
+          const li = document.createElement('li');
+          li.innerHTML = `<strong>${title}</strong><small>${it.when||''}</small>`;
+          li.onclick = () => renderSnapshot(it, true);
+          list.appendChild(li);
+        }
+      } catch(err){
+        console.error('loadHistory error', err);
+      }
+    }
+
+    document.getElementById('clearHistory').onclick = async () => {
+      try{ await clearSnapshots(); await loadHistory(); }catch(e){ console.error(e); }
+    };
+
+    /* ===================== Backtest runner ===================== */
     async function runAll(autoFromFile=false){
       const form = document.getElementById('cfgForm');
       const fd = new FormData(form);
       const fileInput = document.getElementById('csv');
-      if (autoFromFile && fileInput.files.length === 0){ toast("No file selected."); return; }
-      if (fileInput.files.length > 0){ fd.set('file', fileInput.files[0]); } else { fd.delete('file'); }
+      const useSample = document.getElementById('use_sample').checked;
+
+      if (autoFromFile && fileInput.files.length === 0) return;
+      if (!useSample && fileInput.files.length > 0){ fd.set('file', fileInput.files[0]); } else { fd.delete('file'); }
 
       if (controller) controller.abort();
       controller = new AbortController();
-      blockUI(fileInput.files.length ? "Uploading + running…" : "Running backtest…");
+      blockUI(!useSample && fileInput.files.length ? 'Uploading + running…' : 'Running backtest…');
 
       try{
         const res = await fetch("{{ url_for('run_all') }}", { method:"POST", body: fd, signal: controller.signal });
-        if (!res.ok){ const txt = await res.text(); toast(`Error ${res.status}: ${txt.slice(0,120)}`); unblockUI(); return; }
+        if (!res.ok){ const txt = await res.text(); throw new Error(`HTTP ${res.status}: ${txt.slice(0,200)}`); }
         const data = await res.json();
-        if (!data.ok){ toast(data.message || "Run failed"); unblockUI(); return; }
+        if (!data.ok){ throw new Error(data.message || 'Run failed'); }
 
-        const m = data.metrics, p = data.params, c = data.chart;
+        // derive exact range (prefer backend window; fallback to series bounds)
+        const cDates = data.chart?.dates || [];
+        const range = [
+          (data.window && data.window.start) ? data.window.start : (cDates[0] || null),
+          (data.window && data.window.end)   ? data.window.end   : (cDates[cDates.length-1] || null)
+        ];
 
-        const html = `
-          <h3>Results</h3>
-          <div id="equityChart" style="height:400px"></div>
-          <div class="metrics">
-            <div class="metric"><b>${(m.cagr*100).toFixed(2)}%</b><span class="pill">CAGR</span></div>
-            <div class="metric"><b>${(m.vol*100).toFixed(2)}%</b><span class="pill">Ann. Vol</span></div>
-            <div class="metric"><b>${(m.sharpe).toFixed(2)}</b><span class="pill">Sharpe</span></div>
-            <div class="metric"><b>${(m.max_dd*100).toFixed(2)}%</b><span class="pill">Max DD</span></div>
-            <div class="metric"><b>${(m.avg_turn).toFixed(3)}</b><span class="pill">Avg Turnover</span></div>
-            <div class="metric"><b>${(m.hit_rate*100).toFixed(1)}%</b><span class="pill">Hit Rate</span></div>
-          </div>
-          <h4 style="margin-top:12px">Params</h4>
-          <p class="pill">Dates: ${p.start} → ${p.end} | Win=${p.mom_win} Gap=${p.gap} Q=${(p.quantile*100).toFixed(0)}% MaxPos=${p.max_pos} TC=${p.tc_bps}bps</p>
-          <div style="margin-top:10px">
-            <a class="pill" href="${location.origin + "{{ url_for('download_run', run_id='RUN') }}".replace('RUN', data.run_id)}">Download run CSV</a>
-          </div>
-        `;
-        document.getElementById('resBody').innerHTML = html;
+        // build compact snapshot that renders identically later
+        const snapshot = {
+          when: new Date().toLocaleString(),
+          data_source: data.data_source,
+          run_id: data.run_id,
+          params: data.params,
+          metrics: data.metrics,
+          range,
+          x: cDates,
+          y: data.chart?.equity || []
+        };
 
-        // Interactive Plotly chart (with fullscreen + range selector + panning)
-        // Interactive Plotly chart (with fullscreen, range selector, panning/zoom)
-        
-        Plotly.newPlot('equityChart', [{
-          x: c.dates,
-          y: c.equity,
-          mode: 'lines',
-          line: { color:'#7bd4ff', width:2 },
-          name: 'Equity Curve'
-        }], {
-          title: "Equity Curve",
-          margin: {t:40},
-          paper_bgcolor: '#0b0f2a',
-          plot_bgcolor: '#0b0f2a',
-          font: {color:'#e9edf6'},
-          xaxis: {
-            showgrid: false,
-            rangeselector: {
-              buttons: [
-                {count:1, step:'month', stepmode:'backward', label:'1m'},
-                {count:6, step:'month', stepmode:'backward', label:'6m'},
-                {count:1, step:'year', stepmode:'backward', label:'1y'},
-                {step:'all', label:'All'}
-              ]
-            },
-            rangeslider: {visible:true}
-          },
-          yaxis: {showgrid:true, zeroline:false}
-        }, {
-          responsive: true,
-          displayModeBar: true,
-          displaylogo: false,
-          scrollZoom: true,
-          modeBarButtonsToAdd: [
-            {
-              name: 'Fullscreen',
-      icon: Plotly.Icons['arrows-v'], // pick any icon
-      click: function(gd) {
-        const el = document.getElementById('equityChart');
-        if (!document.fullscreenElement) {
-          el.requestFullscreen();
-        } else {
-          document.exitFullscreen();
-        }
-      }
-    }
-  ]
-});
+        renderSnapshot(snapshot, false);
 
+        await saveSnapshot(snapshot);
+        await loadHistory();
 
-
-
-
-
-
-        toast(data.message || "Backtest completed.");
+        document.getElementById('loadedInfo').textContent = `${data.data_source}: ${data.n_days} days`;
       } catch(err){
-        if (err.name === 'AbortError'){ toast("Run cancelled."); }
-        else { console.error(err); toast("Unexpected error (see console)."); }
+        console.error(err);
+        alert(err.message || 'Unexpected error');
       } finally {
         unblockUI(); controller = null;
       }
     }
 
+    /* ===================== Rendering ===================== */
+    function renderSnapshot(snap, fromHistory){
+      const m = snap.metrics || {};
+      const p = snap.params  || {};
+      const x = snap.x || [];
+      const y = snap.y || [];
+      const [x0, x1] = snap.range || [x[0], x[x.length-1]];
+
+      const html = `
+        <h3>Results</h3>
+        <div class="chart-wrap"><div id="equityChart" style="height:100%"></div></div>
+        <div class="metrics">
+          <div class="metric"><b>${((m.cagr||0)*100).toFixed(2)}%</b><span class="chip">CAGR</span></div>
+          <div class="metric"><b>${((m.vol||0)*100).toFixed(2)}%</b><span class="chip">Ann. Vol</span></div>
+          <div class="metric"><b>${(m.sharpe||0).toFixed(2)}</b><span class="chip">Sharpe</span></div>
+          <div class="metric"><b>${((m.max_dd||0)*100).toFixed(2)}%</b><span class="chip">Max DD</span></div>
+          <div class="metric"><b>${(m.avg_turn||0).toFixed(3)}</b><span class="chip">Avg Turnover</span></div>
+          <div class="metric"><b>${((m.hit_rate||0)*100).toFixed(1)}%</b><span class="chip">Hit Rate</span></div>
+        </div>
+        <h4 style="margin-top:12px">Params</h4>
+        <p class="chip">Dates: ${p.start||''} → ${p.end||''} | Win=${p.mom_win||''} Gap=${p.gap||''} Q=${p.quantile? (p.quantile*100).toFixed(0):''}% MaxPos=${p.max_pos||''} TC=${p.tc_bps||''}bps</p>
+        ${fromHistory ? '' : `<div style="margin-top:10px"><a class="chip" href="${location.origin + "{{ url_for('download_run', run_id='RUN') }}".replace('RUN', snap.run_id)}">Download run CSV</a></div>`}
+      `;
+      document.getElementById('resBody').innerHTML = html;
+
+      const fullscreenIcon = { width:1024, height:1024, path:'M96,352 L96,96 352,96 M672,96 928,96 928,352 M928,672 928,928 672,928 M352,928 96,928 96,672 M256,256 L416,256 256,416 M768,256 L608,256 768,416 M256,768 L256,608 416,768 M768,768 L608,768 768,608' };
+
+      const layout = {
+        title: 'Equity Curve',
+        margin:{t:40},
+        paper_bgcolor:'#0b0f2a', plot_bgcolor:'#0b0f2a',
+        font:{color:'#e9edf6'},
+        xaxis:{
+          showgrid:false,
+          autorange:false,
+          range: (x0 && x1) ? [x0, x1] : undefined,
+          rangeselector:{
+            buttons:[
+              {count:1, step:'month', stepmode:'backward', label:'1m'},
+              {count:6, step:'month', stepmode:'backward', label:'6m'},
+              {count:1, step:'year', stepmode:'backward', label:'1y'},
+              {step:'all', label:'All'}
+            ],
+            bgcolor:'#1b2147', activecolor:'#3a86ff', font:{color:'#ffffff'}
+          },
+          rangeslider:{visible:true}
+        },
+        yaxis:{showgrid:true, zeroline:false}
+      };
+
+      Plotly.newPlot('equityChart', [{
+        x, y, mode:'lines', line:{width:2, color:'#7bd4ff'}, name:'Equity Curve', uid: snap.run_id
+      }], layout, {
+        responsive:true, displaylogo:false, scrollZoom:true, doubleClick:'reset',
+        modeBarButtonsToAdd:[{
+          name:'Fullscreen',
+          icon: fullscreenIcon,
+          click: function(){
+            const el = document.getElementById('equityChart');
+            if (!document.fullscreenElement) el.requestFullscreen();
+            else document.exitFullscreen();
+          }
+        }]
+      });
+    }
+
+    /* ===================== Wire buttons & boot ===================== */
+    document.getElementById('runBtn').onclick = () => runAll(false);
     document.getElementById('cancelBtn').onclick = () => { if (controller) controller.abort(); };
-    window.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('csv').addEventListener('change', () => runAll(true));
-      document.getElementById('runBtn').addEventListener('click', (e) => { e.preventDefault(); runAll(false); });
-    });
+
+    // initial history
+    loadHistory();
   </script>
 </body>
-
-
-
-
 </html>
