@@ -13,7 +13,8 @@ Small, hackable dashboard for a **research → portfolio → results** loop in s
 
 ## Demo layout
 
-![loop](https://github.com/user-attachments/assets/c4fe4606-87de-4eb0-9d2e-8f88f2fdbd8a)
+![sys2_LOOP_FOREVER](https://github.com/user-attachments/assets/422228b8-fed4-4b70-9980-79bc6a9455cb)
+
 
 ---
 
